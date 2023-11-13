@@ -328,3 +328,15 @@ class GPT(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)
 
         return idx
+
+    def quantize_weights(self, quantization_fn):
+        for param in self.parameters():
+            _, dequantized = quantization_fn(param.data)
+            param.data = dequantized
+
+    def absmax_quantize(self, X):
+        # Calculate scale for 8 bit absmax quantization
+        scale = 127 / torch.max(torch.abs(X))
+        X_quant = (scale * X).round()
+        X_dequant = X_quant / scale
+        return X_quant.to(torch.int8), X_dequant
