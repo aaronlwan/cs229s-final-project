@@ -13,11 +13,10 @@ import numpy as np, torch, os, tiktoken, time
 from model import GPT, GPTConfig
 from contextlib import nullcontext
 
-def load_model(model_path):
+def load_model(model_path, device='cuda'):
     # Load GPT model from checkpoint
-    ckpt_path = os.path.join(model_path, 'ckpt.pt')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    checkpoint = torch.load(ckpt_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device)
     model_args = checkpoint['model_args']
 
     # Create the model
@@ -34,58 +33,47 @@ def load_model(model_path):
     model.to(device)
     return model
 
+# Load Data
+def load_data(dataset='wikitext'):
+    # poor man's data loader
+    data_dir = os.path.join('data', dataset)
+    train_data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
+    val_data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
+    return train_data, val_data
+
+def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=torch.device("cuda"), train_data=None, val_data=None):
+    data = train_data if split == 'train' else val_data
+    ix = torch.randint(len(data) - block_size, (batch_size,))
+    x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
+    y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
+    if device_type == 'cuda':
+        # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
+    else:
+        x, y = x.to(device), y.to(device)
+    return x, y
 
 # Inference
-def perform_inference(model, start, batch_size, max_new_tokens, temperature, top_k, device, dtype, num_samples=1):
-    ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
-    ctx = nullcontext() if device == 'cpu' else torch.amp.autocast(device_type=device, dtype=ptdtype)
+def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, device, dtype, num_samples=1):
 
     enc = tiktoken.get_encoding("gpt2")
-    encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
     decode = lambda l: enc.decode(l)
 
-    # encode the beginning of the prompt
-    if start.startswith('FILE:'):
-        with open(start[5:], 'r', encoding='utf-8') as f:
-            start = f.read()
-
-    inputs = []
-    # Chunk start into input sequences of length 1024
-    for i in range(0, len(start), 1024):
-        # Pad the last chunk to length 1024
-        if i + 1024 > len(start):
-            inputs.append(start[i:] + ' ' * (1024 - (len(start) - i))) 
-        else:
-            inputs.append(start[i:i+1024])
-
-    # Encode each chunk
-    start_ids = []
-    for inp in inputs:
-        start_ids.append(encode(inp))
-
-    # start_ids has shape (num_chunks, 1024)
-    # we want to create a tensor x of shape (num_batches, batch_size, 1024)
-    x = []
-    for i in range(0, len(start_ids), batch_size):
-        # Pad the last batch to length batch_size
-        if i + batch_size > len(start_ids):
-            x.append(start_ids[i:] + [[0] * 1024] * (batch_size - (len(start_ids) - i)))
-        else:
-            x.append(start_ids[i:i+batch_size])
-    x = torch.tensor(x, dtype=torch.long, device=device)
+    train_data, val_data = load_data()
 
     total_time = 0
     tokens_generated = 0
 
     start_time = time.time()
     with torch.no_grad():
-        with ctx:
-            for batch in x:
-                for k in range(num_samples):
-                    y = model.generate(batch, max_new_tokens, temperature=temperature, top_k=top_k)
-                    tokens_generated += len(y[0].tolist())
-                    print(decode(y[0].tolist()))
-                    print('---------------')
+        # with ctx:
+        model.quantize_weights(model.absmax_quantize)
+        for _ in range(num_samples):
+            X, Y = get_batch('val', batch_size=batch_size, device_type=device, device=device, train_data=train_data, val_data=val_data)
+            y = model.generate(X, max_new_tokens, temperature=temperature, top_k=top_k)
+            tokens_generated += len(y[0].tolist())
+            print(decode(y[0].tolist()))
+            print('---------------')
 
     total_time = time.time() - start_time
     print('Total time: ', total_time)
@@ -96,13 +84,13 @@ def perform_inference(model, start, batch_size, max_new_tokens, temperature, top
 
 
 
-model = load_model('model')
+model = load_model('ckpt.pt')
 
 # Batch size 1
-tps1 = perform_inference(model, 'FILE:prompt.txt', 1, 500, 0.8, 200, torch.device("cuda" if torch.cuda.is_available() else "cpu"), 'bfloat16', 1)
+tps1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 50)
 
 # Batch size 12
-tps12 = perform_inference(model, 'FILE:prompt.txt', 12, 500, 0.8, 200, torch.device("cuda" if torch.cuda.is_available() else "cpu"), 'bfloat16', 1)
+tps12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 50)
 
 
 # Write results to results.json
