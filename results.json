@@ -1,0 +1,7 @@
+{
+    "loss": 3.1170,
+    "inference_latency_1": 100.0,
+    "inference_latency_12": 100.0, 
+    "training_throughput_4": 0.0,
+    "training_throughput_12": 0.0
+}
