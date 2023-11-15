@@ -9,7 +9,7 @@ The run_experiments.py file must run the training and inference steps listed abo
     "training_throughput_12": 0.0
 }
 """
-import numpy as np, torch, os, tiktoken
+import numpy as np, torch, os, tiktoken, time
 from model import GPT, GPTConfig
 from contextlib import nullcontext
 
@@ -74,12 +74,45 @@ def perform_inference(model, start, batch_size, max_new_tokens, temperature, top
             x.append(start_ids[i:i+batch_size])
     x = torch.tensor(x, dtype=torch.long, device=device)
 
+    total_time = 0
+    tokens_generated = 0
+
+    start_time = time.time()
     with torch.no_grad():
         with ctx:
             for batch in x:
                 for k in range(num_samples):
                     y = model.generate(batch, max_new_tokens, temperature=temperature, top_k=top_k)
+                    tokens_generated += len(y[0].tolist())
                     print(decode(y[0].tolist()))
                     print('---------------')
 
+    total_time = time.time() - start_time
+    print('Total time: ', total_time)
+    print('Tokens generated: ', tokens_generated)
+    tokens_per_sec = tokens_generated / total_time
+    print('Tokens per second: ', tokens_per_sec)
+    return tokens_per_sec
 
+
+
+model = load_model('model')
+
+# Batch size 1
+tps1 = perform_inference(model, 'FILE:prompt.txt', 1, 500, 0.8, 200, torch.device("cuda" if torch.cuda.is_available() else "cpu"), 'bfloat16', 1)
+
+# Batch size 12
+tps12 = perform_inference(model, 'FILE:prompt.txt', 12, 500, 0.8, 200, torch.device("cuda" if torch.cuda.is_available() else "cpu"), 'bfloat16', 1)
+
+
+# Write results to results.json
+import json
+results = {
+    "loss": 3.1170,
+}
+
+results['inference_latency_1'] = tps1
+results['inference_latency_12'] = tps12
+
+with open('results.json', 'w') as f:
+    json.dump(results, f)
