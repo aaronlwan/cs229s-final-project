@@ -71,7 +71,7 @@ def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, dev
         for _ in range(num_samples):
             X, Y = get_batch('val', batch_size=batch_size, device_type=device, device=device, train_data=train_data, val_data=val_data)
             y = model.generate(X, max_new_tokens, temperature=temperature, top_k=top_k)
-            tokens_generated += len(y[0].tolist())
+            tokens_generated += sum(len(yi.tolist()) for yi in y)
             print(decode(y[0].tolist()))
             print('---------------')
 
@@ -87,10 +87,10 @@ def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, dev
 model = load_model('ckpt.pt')
 
 # Batch size 1
-tps1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 50)
+tps1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
 
 # Batch size 12
-tps12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 50)
+tps12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
 
 
 # Write results to results.json
