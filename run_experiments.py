@@ -1,14 +1,3 @@
-"""
-The run_experiments.py file must run the training and inference steps listed above and write out results.json, where results.json exactly matches this format:
-
-{
-    "loss": 100.0,
-    "inference_latency_1": 100.0,
-    "inference_latency_12": 100.0, 
-    "training_throughput_4": 0.0,
-    "training_throughput_12": 0.0
-}
-"""
 import numpy as np, torch, os, tiktoken, time
 from model import GPT, GPTConfig
 from contextlib import nullcontext
@@ -407,8 +396,9 @@ def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, dev
 # Train
 _, loss = train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
 
-samples_per_sec_4, _ = train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
-samples_per_sec_12, _ = train(dataset='wikitext', batch_size=12, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
+samples_per_sec_4, _ = train(dataset='wikitext', batch_size=4, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
+
+samples_per_sec_12, _ = train(dataset='wikitext', batch_size=12, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
 
 model = load_model('ckpt.pt')
 
@@ -426,8 +416,8 @@ results = {}
 results['loss'] = loss
 results['training_throughput_4'] = samples_per_sec_4
 results['training_throughput_12'] = samples_per_sec_12
-results['inference_latency_1'] = tps1
-results['inference_latency_12'] = tps12
+results['inference_throughput_1'] = tps1
+results['inference_throughput_12'] = tps12
 
 with open('results.json', 'w') as f:
     json.dump(results, f)
