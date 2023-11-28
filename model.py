@@ -387,10 +387,10 @@ class GPT(nn.Module):
             num_pruned = int(param.numel() * pruning_rate)
             # get the magnitude of the weights
             magnitude = torch.abs(param.data)
-            # get the threshold value
-            threshold = torch.topk(magnitude.view(-1), num_pruned, largest=False).values[-1]
-            # prune the weights
-            param.data[magnitude < threshold] = 0
-    
-    
+            # get indices of the smallest weights
+            indices = torch.argsort(magnitude, dim=None, descending=False)
+            # prune the smallest weights
+            param.data.view(-1)[indices[:num_pruned]] = 0
+
+
         
