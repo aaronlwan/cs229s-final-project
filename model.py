@@ -377,4 +377,20 @@ class GPT(nn.Module):
             param.data = quantized
             self.quantization_scales[name] = scale
     
+
+    def magnitude_pruning(self, pruning_rate):
+        # Prune the smallest weights in the model based on the pruning rate
+        # the magnitude is the absolute value of the weight
+        for name, param in self.named_parameters():
+          if 'transformer.h' in name:
+            # calculate the number of weights to prune
+            num_pruned = int(param.numel() * pruning_rate)
+            # get the magnitude of the weights
+            magnitude = torch.abs(param.data)
+            # get the threshold value
+            threshold = torch.topk(magnitude.view(-1), num_pruned, largest=False).values[-1]
+            # prune the weights
+            param.data[magnitude < threshold] = 0
     
+    
+        
