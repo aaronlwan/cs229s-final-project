@@ -10,6 +10,7 @@ https://github.com/huggingface/transformers/blob/main/src/transformers/models/gp
 import math
 import inspect
 from dataclasses import dataclass
+from numpy import ScalarType
 
 import torch
 import torch.nn as nn
@@ -122,6 +123,7 @@ class GPT(nn.Module):
         assert config.vocab_size is not None
         assert config.block_size is not None
         self.config = config
+        self.quantize = True
 
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
@@ -136,6 +138,9 @@ class GPT(nn.Module):
         # This behavior is deprecated and will be an error in future versions"
         # not 100% sure what this is, so far seems to be harmless. TODO investigate
         self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
+
+        # quantization scales
+        self.quantization_scales = {}
 
         # init all weights
         self.apply(self._init_weights)
@@ -177,8 +182,22 @@ class GPT(nn.Module):
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
-        for block in self.transformer.h:
-            x = block(x)
+        for i, block in enumerate(self.transformer.h):
+            # de-quantize and re-quantize
+            if not self.training and self.quantize:
+              to_dequantize = [name for name in self.quantization_scales if f'transformer.h.{i}' in name]
+              for name in to_dequantize:
+                param = self.get_nested_attr(name)
+                param.data = self.dequantize_layer(name)
+
+              x = block(x)
+
+              for name in to_dequantize:
+                param = self.get_nested_attr(name)
+                param.data, _ = self.absmax_quantize(param.data)
+            else:
+              x = block(x)
+
         x = self.transformer.ln_f(x)
 
         if targets is not None:
@@ -329,14 +348,33 @@ class GPT(nn.Module):
 
         return idx
 
-    def quantize_weights(self, quantization_fn):
-        for param in self.parameters():
-            _, dequantized = quantization_fn(param.data)
-            param.data = dequantized
+    def get_nested_attr(obj, attr):
+      # get nested param with recursion
+      for part in attr.split('.'):
+          obj = getattr(obj, part)
+      return obj
 
     def absmax_quantize(self, X):
         # Calculate scale for 8 bit absmax quantization
         scale = 127 / torch.max(torch.abs(X))
-        X_quant = (scale * X).round()
-        X_dequant = X_quant / scale
-        return X_quant.to(torch.int8), X_dequant
+        X_quant = (scale * X).round().to(torch.int8)
+        return X_quant, scale
+
+    def dequantize_layer(self, name):
+        # retrieve scale for dequantization
+        scale = self.quantization_scales[name]
+        quantized = self.get_nested_attr(name).data
+        return quantized.float() / scale
+
+    def quantize_transformers(self):
+        for block in self.transformer.h:
+          block.requires_grad_(False)
+
+        for name, param in self.named_parameters():
+          # only quantize transformer weights for now
+          if 'transformer.h' in name:
+            quantized, scale = self.absmax_quantize(param.data)
+            param.data = quantized
+            self.quantization_scales[name] = scale
+    
+    
