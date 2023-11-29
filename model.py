@@ -392,5 +392,18 @@ class GPT(nn.Module):
             # prune the smallest weights
             param.data.view(-1)[indices[:num_pruned]] = 0
 
-
+    
+    def l2_norm_pruning(self, pruning_rate):
+        # Prune the rows w/ the smallest L2 norm in the model based on the pruning rate
+        # the L2 norm is the square root of the sum of the squares of the weights
+        for name, param in self.named_parameters():
+          if 'transformer.h' in name:
+            # calculate the number of rows to prune
+            num_pruned = int(param.shape[0] * pruning_rate)
+            # get the L2 norm of the rows
+            l2_norm = torch.norm(param.data, dim=1)
+            # get indices of the smallest L2 norms
+            indices = torch.argsort(l2_norm, dim=None, descending=False)
+            # prune the smallest L2 norms
+            param.data[indices[:num_pruned]] = 0
         
