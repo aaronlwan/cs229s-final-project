@@ -348,6 +348,58 @@ class GPT(nn.Module):
 
         return idx
 
+    @torch.no_grad()
+    def generate_speculative(self, idx, max_new_tokens, draft_model, temperature=1.0, top_k=None, num_speculative=4):
+        """
+        Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
+        the sequence max_new_tokens times, feeding the predictions back into the model each time.
+        Most likely you'll want to make sure to be in model.eval() mode of operation for this.
+        """
+
+        # self.enable_kv(False)  # disable KV cache for the main model -- it's not worth the effort
+
+        if idx.size(0) != 1:
+            raise ValueError("speculative decoding only works with batch size 1")
+        idx_length_original = idx.size(1)
+
+        loop_counter = 0
+        while idx.size(1) < idx_length_original + max_new_tokens:
+            loop_counter += 1
+            # if the sequence context is growing too long we must crop it at block_size
+            idx_cond = idx if idx.size(1) <= self.config.block_size - num_speculative else idx[:,
+                                                                                           -self.config.block_size - num_speculative:]
+
+            # Generate speculative tokens from the draft model. Then, run it through the main model.
+            # Be sure to set top_k=1, otherwise you'll pollute the RNG! (Which will make your code harder to debug.)
+            # use the draft_model to generate speculative tokens
+            idx_speculative = draft_model.generate_kv(idx_cond, num_speculative, temperature, top_k=1)
+
+            # obtain the logits from the main model by passing in the idx_speculative
+            all_logits, _ = self(idx_speculative)
+            # Step through the predictions of the main model, sampling, and check whether they match the next token. Stop upon mismatch.
+            # iterate from the end position of idx_cond (prefix sequence) to the end position of idx_speculative (generated sequence)
+            for i in range(num_speculative, 0, -1):
+                # pluck the logits at the current position and scale by desired temperature
+                curr_logit = all_logits[:, -i - 1, :] / temperature
+                # optionally crop the logits to only the top k options
+                if top_k is not None:
+                    v, _ = torch.topk(curr_logit, min(top_k, curr_logit.size(-1)))
+                    curr_logit[curr_logit < v[:, [-1]]] = -float('Inf')
+                # apply softmax to convert logits to (normalized) probabilities
+                probs = F.softmax(curr_logit, dim=-1)
+
+                # sample from the distribution with temperature
+                idx_next = torch.multinomial(probs, num_samples=1)
+
+                # append sampled index to the running sequence and continue
+                idx = torch.cat((idx, idx_next), dim=1)
+                # end the loop if the next token does not match the next token in idx_speculative
+                if idx_next != idx_speculative[0, -i]:
+                    break
+
+        print(f"speculative decoding ran for {loop_counter} iterations")
+        return idx[:, :idx_length_original + max_new_tokens]
+
     def get_nested_attr(obj, attr):
       # get nested param with recursion
       for part in attr.split('.'):
