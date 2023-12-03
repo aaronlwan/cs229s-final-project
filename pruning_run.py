@@ -1,5 +1,5 @@
 import torch
-def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, gradient_accumulation_steps=40, inputModel=None):
+def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40, inputModel=None):
     import os
     import time
     import math
@@ -138,7 +138,7 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
                 print("defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)")
             model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304
             gptconf = GPTConfig(**model_args)
-            model = GPT(gptconf)
+            model = GPT(gptconf, quantize=True)
         elif init_from == 'resume':
             print(f"Resuming training from {out_dir}")
             # resume training from a checkpoint.
@@ -310,15 +310,29 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
             if local_iter_num >= 5: # let the training loop settle a bit
                 mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
                 running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+            # print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
         iter_num += 1
         local_iter_num += 1
 
         # termination conditions
         if iter_num > max_iters:
+            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
             break
-   
-    return model
+    def eval_execution(model, batch_size, eval_iters):
+        start = time.time()
+        model.eval()
+        total_loss = 0
+        for k in range(eval_iters):
+            X, Y = get_batch('val')
+            with ctx:
+                logits, loss = model(X, Y)
+            total_loss += loss.item()
+        model.train()
+        end = time.time()
+        return (end - start)/(eval_iters*batch_size), total_loss/eval_iters
+    val_time, val_loss = eval_execution(model, batch_size, 1)
+    print(f"Validation time: {val_time}, Validation loss: {val_loss}")
+    return model, val_time, val_loss
 
 
 def load_model(model_path, device='cuda'):
@@ -363,15 +377,27 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
     return x, y
 
 
+
 # Pruning Loop
 # Initial model w/ 100% params
-model = train(max_iters=100)
+model, val_time, val_loss = train(max_iters=100)
+params = model.l2_norm_pruning(0)
+# Write the results to a file
+with open('results.txt', 'a') as f:
+    f.write(f"{params}, {val_time}, {val_loss}")
+    f.write("\n")
+
+# # Save the model
+# torch.save(model.state_dict(), f'models/{params}.pt')
+# print(f"Pruned model to {params} parameters")
+
 # Decrease model size by 10% each iteration until 10% of original model size
 for i in range(1, 10):
-    model.magnitude_pruning(0.1 * i)
-    model = train(max_iters=100, inputModel=model)
-
-
-
-
-
+    params = model.l2_norm_pruning(0.1 * i)
+    print(f"Pruned model to {params} parameters")
+    model, val_time,  val_loss = train(max_iters=100, inputModel=model)
+    # Write the results to a file
+    with open('results.txt', 'a') as f:
+        f.write(f"{params}, {val_time}, {val_loss}")
+        f.write("\n")
+    # torch.save(model.state_dict(), f'models/{params}.pt')
