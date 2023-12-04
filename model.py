@@ -471,7 +471,7 @@ class GPT(nn.Module):
             if name in names_to_prune:
                 param.data = torch.zeros_like(param.data)
                 # Freeze the pruned weights
-                param.data.requires_grad_(False)
+                param.requires_grad = False
             else:
                 total_params += param.numel()
 
