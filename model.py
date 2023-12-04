@@ -435,8 +435,9 @@ class GPT(nn.Module):
     def magnitude_pruning(self, pruning_rate):
         # Prune the smallest weights in the model based on the pruning rate
         # the magnitude is the absolute value of the weight
+        locked_masks = {}
+        total_pruned = 0
         for name, param in self.named_parameters():
-          if 'transformer.h' in name:
             # calculate the number of weights to prune
             num_pruned = int(param.numel() * pruning_rate)
             # get the magnitude of the weights
@@ -447,36 +448,41 @@ class GPT(nn.Module):
             indices = torch.argsort(magnitude, descending=False)
             # prune the smallest weights
             param.data.view(-1)[indices[:num_pruned]] = 0
+            locked_masks[name] = indices[:num_pruned]
+            total_pruned += num_pruned
+
         # Return number of parameters remaining
-        return self.get_num_params() - num_pruned
+        return self.get_num_params() - total_pruned, locked_masks
 
     
     def l2_norm_pruning(self, pruning_rate):
         # Prune the rows w/ the smallest L2 norm in the model based on the pruning rate
         # the L2 norm is the square root of the sum of the squares of the weights
         l2_norms = []
+        total_params = self.get_num_params()
         for name, param in self.named_parameters():
-          if 'transformer.h' in name:
-            # calculate the L2 norm of the weights
-            l2_norm = torch.norm(param.data, p=2)
-            l2_norms.append((name, l2_norm))
-        # get the number of rows to prune
-        num_pruned = int(len(l2_norms) * pruning_rate)
-        # get the rows w/ the smallest L2 norm
-        l2_norms.sort(key=lambda x: x[1])
-        # prune the smallest rows
-        names_to_prune = list([name for name, _ in l2_norms[:num_pruned]])
-        total_params = 0
-        for name, param in self.named_parameters():
-            if name in names_to_prune:
-                param.data = torch.zeros_like(param.data)
-                # Freeze the pruned weights
-                param.requires_grad = False
-            else:
-                total_params += param.numel()
+            # Iterate through the rows of the weight matrix
+            for i in range(param.data.shape[0]):
+                # Calculate the L2 norm of the row
+                l2_norm = torch.norm(param.data[i])
+                # Append the name, L2 norm, and index of the row
+                l2_norms.append((name, l2_norm, i))
 
+        # get the rows w/ the smallest L2 norm
+        l2_norms.sort(key=lambda x: x[1], reverse=True)
+        
+        pruned_params = 0
+        while pruned_params < pruning_rate * total_params:
+            paramName, _, index = l2_norms.pop()
+            for name, param in self.named_parameters():
+                if name == paramName:
+                    # Prune the row
+                    param.data[index] = torch.zeros(param.data[index].shape)
+                    pruned_params += param.data[index].numel()
+                    break
+        
         # Return number of parameters remaining
-        return total_params
+        return total_params - pruned_params
 
             
         

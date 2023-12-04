@@ -1,5 +1,5 @@
 import torch
-def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40, inputModel=None):
+def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40, inputModel=None, locked_masks=None):
     import os
     import time
     import math
@@ -289,13 +289,22 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
             X, Y = get_batch('train')
             # backward pass, with gradient scaling if training in fp16
             scaler.scale(loss).backward()
+
         # clip the gradient
         if grad_clip != 0.0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        
+        # Make sure we do not train the pruned weights
+        if locked_masks is not None:
+            for n, w in model.named_parameters():                                                                                                                                                                           
+                if w.grad is not None and n in locked_masks:                                                                                                                                                                                   
+                    w.grad.view(-1)[locked_masks[n]] = 0
+
         # step the optimizer and scaler if training in fp16
         scaler.step(optimizer)
         scaler.update()
+
         # flush the gradients as soon as we can, no need for this memory anymore
         optimizer.zero_grad(set_to_none=True)
 
@@ -378,26 +387,39 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
 
 
 
-# Pruning Loop
-# Initial model w/ 100% params
+# Magnitude Pruning
 model, val_time, val_loss = train(max_iters=100)
-params = model.l2_norm_pruning(0)
+params, _ = model.magnitude_pruning(0)
 # Write the results to a file
-with open('results.txt', 'a') as f:
+with open('magnitude_pruning_results.txt', 'a') as f:
     f.write(f"{params}, {val_time}, {val_loss}")
     f.write("\n")
 
-# # Save the model
-# torch.save(model.state_dict(), f'models/{params}.pt')
-# print(f"Pruned model to {params} parameters")
+# Decrease model size by 10% each iteration until 10% of original model size
+for i in range(1, 2):
+    params, locked_masks = model.magnitude_pruning(0.1 * i)
+    print(f"Pruned model to {params} parameters")
+    model, val_time, val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
+    # Write the results to a file
+    with open('magnitude_pruning_results.txt', 'a') as f:
+        f.write(f"{params}, {val_time}, {val_loss}")
+        f.write("\n")
+del model
+
+# L2 Norm Pruning
+model, val_time, val_loss = train(max_iters=100)
+params = model.l2_norm_pruning(0)
+# Write the results to a file
+with open('l2_pruning_results.txt', 'a') as f:
+    f.write(f"{params}, {val_time}, {val_loss}")
+    f.write("\n")
 
 # Decrease model size by 10% each iteration until 10% of original model size
-for i in range(1, 10):
+for i in range(1, 2):
     params = model.l2_norm_pruning(0.1 * i)
     print(f"Pruned model to {params} parameters")
     model, val_time,  val_loss = train(max_iters=100, inputModel=model)
     # Write the results to a file
-    with open('results.txt', 'a') as f:
+    with open('l2_pruning_results.txt', 'a') as f:
         f.write(f"{params}, {val_time}, {val_loss}")
         f.write("\n")
-    # torch.save(model.state_dict(), f'models/{params}.pt')
