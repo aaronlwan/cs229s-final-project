@@ -471,6 +471,7 @@ class GPT(nn.Module):
         # get the rows w/ the smallest L2 norm
         l2_norms.sort(key=lambda x: x[1], reverse=True)
         
+        locked_masks = {}
         pruned_params = 0
         while pruned_params < pruning_rate * total_params:
             paramName, _, index = l2_norms.pop()
@@ -478,11 +479,16 @@ class GPT(nn.Module):
                 if name == paramName:
                     # Prune the row
                     param.data[index] = torch.zeros(param.data[index].shape)
+                    if name not in locked_masks:
+                        locked_masks[name] = []
+                    for i in range(param.data.shape[1]):
+                        locked_masks[name].append(index * param.data.shape[1] + i) 
+                    
                     pruned_params += param.data[index].numel()
                     break
         
         # Return number of parameters remaining
-        return total_params - pruned_params
+        return total_params - pruned_params, locked_masks
 
             
         

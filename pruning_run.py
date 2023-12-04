@@ -396,7 +396,7 @@ with open('magnitude_pruning_results.txt', 'a') as f:
     f.write("\n")
 
 # Decrease model size by 10% each iteration until 10% of original model size
-for i in range(1, 2):
+for i in range(1, 10):
     params, locked_masks = model.magnitude_pruning(0.1 * i)
     print(f"Pruned model to {params} parameters")
     model, val_time, val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
@@ -408,17 +408,17 @@ del model
 
 # L2 Norm Pruning
 model, val_time, val_loss = train(max_iters=100)
-params = model.l2_norm_pruning(0)
+params, _ = model.l2_norm_pruning(0)
 # Write the results to a file
 with open('l2_pruning_results.txt', 'a') as f:
     f.write(f"{params}, {val_time}, {val_loss}")
     f.write("\n")
 
 # Decrease model size by 10% each iteration until 10% of original model size
-for i in range(1, 2):
-    params = model.l2_norm_pruning(0.1 * i)
+for i in range(1, 10):
+    params, locked_masks = model.l2_norm_pruning(0.1 * i)
     print(f"Pruned model to {params} parameters")
-    model, val_time,  val_loss = train(max_iters=100, inputModel=model)
+    model, val_time,  val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
     # Write the results to a file
     with open('l2_pruning_results.txt', 'a') as f:
         f.write(f"{params}, {val_time}, {val_loss}")
