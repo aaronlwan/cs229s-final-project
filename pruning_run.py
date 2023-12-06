@@ -388,23 +388,23 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
 
 
 # Magnitude Pruning
-model, val_time, val_loss = train(max_iters=100)
-params, _ = model.magnitude_pruning(0)
-# Write the results to a file
-with open('magnitude_pruning_results.txt', 'a') as f:
-    f.write(f"{params}, {val_time}, {val_loss}")
-    f.write("\n")
+# model, val_time, val_loss = train(max_iters=100)
+# params, _ = model.magnitude_pruning(0)
+# # Write the results to a file
+# with open('magnitude_pruning_results.txt', 'a') as f:
+#     f.write(f"{params}, {val_time}, {val_loss}")
+#     f.write("\n")
 
-# Decrease model size by 10% each iteration until 10% of original model size
-for i in range(1, 10):
-    params, locked_masks = model.magnitude_pruning(0.1 * i)
-    print(f"Pruned model to {params} parameters")
-    model, val_time, val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
-    # Write the results to a file
-    with open('magnitude_pruning_results.txt', 'a') as f:
-        f.write(f"{params}, {val_time}, {val_loss}")
-        f.write("\n")
-del model
+# # Decrease model size by 10% each iteration until 10% of original model size
+# for i in range(1, 10):
+#     params, locked_masks = model.magnitude_pruning(0.1 * i)
+#     print(f"Pruned model to {params} parameters")
+#     model, val_time, val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
+#     # Write the results to a file
+#     with open('magnitude_pruning_results.txt', 'a') as f:
+#         f.write(f"{params}, {val_time}, {val_loss}")
+#         f.write("\n")
+# del model
 
 # L2 Norm Pruning
 model, val_time, val_loss = train(max_iters=100)

@@ -474,10 +474,15 @@ class GPT(nn.Module):
         l2_norms = []
         total_params = self.get_num_params()
         for name, param in self.named_parameters():
+            if len(param.data.shape) == 1:
+                # Reshape to 1 row and n columns
+                reshaped_param_data = param.data.view(1, -1)
+            else:
+                reshaped_param_data = param.data
             # Iterate through the rows of the weight matrix
-            for i in range(param.data.shape[0]):
+            for i in range(reshaped_param_data.shape[0]):
                 # Calculate the L2 norm of the row
-                l2_norm = torch.norm(param.data[i])
+                l2_norm = torch.norm(reshaped_param_data[i])
                 # Append the name, L2 norm, and index of the row
                 l2_norms.append((name, l2_norm, i))
 
@@ -494,9 +499,14 @@ class GPT(nn.Module):
                     param.data[index] = torch.zeros(param.data[index].shape)
                     if name not in locked_masks:
                         locked_masks[name] = []
-                    for i in range(param.data.shape[1]):
-                        locked_masks[name].append(index * param.data.shape[1] + i)
-
+                    if len(param.data.shape) == 1:
+                        # Reshape to 1 row and n columns
+                        reshaped_param_data = param.data.view(1, -1)
+                    else:
+                        reshaped_param_data = param.data
+                    for i in range(reshaped_param_data.shape[1]):
+                        locked_masks[name].append(index * reshaped_param_data.shape[1] + i) 
+                    
                     pruned_params += param.data[index].numel()
                     break
 
