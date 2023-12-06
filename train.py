@@ -32,7 +32,6 @@ from model import GPTConfig, GPT
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
-quantize=True
 out_dir = 'out'
 eval_interval = 2000
 log_interval = 1
@@ -332,30 +331,4 @@ while True:
 
 if ddp:
     destroy_process_group()
-
-if quantize:
-    # init from a model saved in a specific directory
-    ckpt_path = os.path.join(out_dir, 'ckpt.pt')
-    checkpoint = torch.load(ckpt_path, map_location=device)
-    gptconf = GPTConfig(**checkpoint['model_args'])
-    model_to_quantize = GPT(gptconf)
-    state_dict = checkpoint['model']
-    unwanted_prefix = '_orig_mod.'
-    for k, v in list(state_dict.items()):
-        if k.startswith(unwanted_prefix):
-            state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
-    model_to_quantize.load_state_dict(state_dict)
-
-    # quantize
-    model_to_quantize.quantize_transformers()
-    # some may need changing?
-    quantize_checkpoint = {
-        'model': model_to_quantize.state_dict(),
-        'optimizer': optimizer.state_dict(),
-        'model_args': model_args,
-        'iter_num': iter_num,
-        'best_val_loss': best_val_loss,
-        'config': config,
-    }
-    torch.save(quantize_checkpoint, os.path.join(out_dir, 'quantized_ckpt.pt'))
 
