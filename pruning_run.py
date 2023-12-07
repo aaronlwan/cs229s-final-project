@@ -407,7 +407,7 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
 # del model
 
 # L2 Norm Pruning
-model, val_time, val_loss = train(max_iters=100)
+model, val_time, val_loss = train(max_iters=1)
 params, _ = model.l2_norm_pruning(0)
 # Write the results to a file
 with open('l2_pruning_results.txt', 'a') as f:
@@ -418,7 +418,7 @@ with open('l2_pruning_results.txt', 'a') as f:
 for i in range(1, 10):
     params, locked_masks = model.l2_norm_pruning(0.1 * i)
     print(f"Pruned model to {params} parameters")
-    model, val_time,  val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
+    model, val_time,  val_loss = train(max_iters=20, inputModel=model, locked_masks=locked_masks)
     # Write the results to a file
     with open('l2_pruning_results.txt', 'a') as f:
         f.write(f"{params}, {val_time}, {val_loss}")
