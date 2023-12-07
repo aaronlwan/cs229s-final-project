@@ -298,8 +298,13 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         # Make sure we do not train the pruned weights
         if locked_masks is not None:
             for n, w in model.named_parameters():                                                                                                                                                                           
-                if w.grad is not None and n in locked_masks:    
-                    w.grad.view(-1)[locked_masks[n]] = 0
+                if w.grad is not None and n in locked_masks:
+                    for row in locked_masks[n]:
+                        if len(w.grad.shape) == 1:
+                            w.grad = torch.zeros_like(w.grad)
+                        else:
+                            w.grad[row] = torch.zeros_like(w.grad[row])
+                    # w.grad.view(-1)[locked_masks[n]] = 0
 
         # step the optimizer and scaler if training in fp16
         scaler.step(optimizer)
@@ -388,7 +393,7 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
 
 
 # Magnitude Pruning
-# model, val_time, val_loss = train(max_iters=100)
+# model, val_time, val_loss = train(max_iters=1)
 # params, _ = model.magnitude_pruning(0)
 # # Write the results to a file
 # with open('magnitude_pruning_results.txt', 'a') as f:
@@ -399,7 +404,7 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
 # for i in range(1, 10):
 #     params, locked_masks = model.magnitude_pruning(0.1 * i)
 #     print(f"Pruned model to {params} parameters")
-#     model, val_time, val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
+#     model, val_time, val_loss = train(max_iters=10, inputModel=model, locked_masks=locked_masks)
 #     # Write the results to a file
 #     with open('magnitude_pruning_results.txt', 'a') as f:
 #         f.write(f"{params}, {val_time}, {val_loss}")
@@ -407,7 +412,7 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
 # del model
 
 # L2 Norm Pruning
-model, val_time, val_loss = train(max_iters=1)
+model, val_time, val_loss = train(max_iters=100)
 params, _ = model.l2_norm_pruning(0)
 # Write the results to a file
 with open('l2_pruning_results.txt', 'a') as f:
@@ -418,7 +423,7 @@ with open('l2_pruning_results.txt', 'a') as f:
 for i in range(1, 10):
     params, locked_masks = model.l2_norm_pruning(0.1 * i)
     print(f"Pruned model to {params} parameters")
-    model, val_time,  val_loss = train(max_iters=20, inputModel=model, locked_masks=locked_masks)
+    model, val_time,  val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
     # Write the results to a file
     with open('l2_pruning_results.txt', 'a') as f:
         f.write(f"{params}, {val_time}, {val_loss}")

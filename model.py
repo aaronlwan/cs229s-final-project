@@ -471,47 +471,24 @@ class GPT(nn.Module):
     def l2_norm_pruning(self, pruning_rate):
         # Prune the rows w/ the smallest L2 norm in the model based on the pruning rate
         # the L2 norm is the square root of the sum of the squares of the weights
-        l2_norms = []
+        total_pruned = 0
         total_params = self.get_num_params()
+        locked_masks = {}
         for name, param in self.named_parameters():
             if len(param.data.shape) == 1:
-                # Reshape to 1 row and n columns
-                reshaped_param_data = param.data.view(1, -1)
+                # Reshape to 1 x n
+                data = param.data.view(1, -1)
             else:
-                reshaped_param_data = param.data
-            # Iterate through the rows of the weight matrix
-            for i in range(reshaped_param_data.shape[0]):
-                # Calculate the L2 norm of the row
-                l2_norm = torch.norm(reshaped_param_data[i])
-                # Append the name, L2 norm, and index of the row
-                l2_norms.append((name, l2_norm, i))
-
-        # get the rows w/ the smallest L2 norm
-        l2_norms.sort(key=lambda x: x[1], reverse=True)
-
-        locked_masks = {}
-        pruned_params = 0
-        while pruned_params < pruning_rate * total_params:
-            paramName, _, index = l2_norms.pop()
-            for name, param in self.named_parameters():
-                if name == paramName:
-                    if len(param.data.shape) == 1:
-                        # Reshape to 1 row and n columns
-                        reshaped_param_data = param.data.view(1, -1)
-                    else:
-                        reshaped_param_data = param.data
-
-                    # Prune the row
-                    reshaped_param_data[index] = torch.zeros_like(reshaped_param_data[index])
-
-                    if name not in locked_masks:
-                        locked_masks[name] = []
-                    
-                    for i in range(reshaped_param_data.shape[1]):
-                        locked_masks[name].append(index * reshaped_param_data.shape[1] + i) 
-                    
-                    pruned_params += reshaped_param_data[index].numel()
-                    break
-
+                data = param.data
+            # calculate the number of rows to prune
+            num_pruned = int(data.shape[0] * pruning_rate)
+            # get the L2 norm of the rows
+            l2_norm = torch.linalg.norm(data, dim=1)
+            # get indicies (row) of the smallest L2 norm
+            indices = torch.argsort(l2_norm, descending=False)
+            # prune the smallest rows
+            data[indices[:num_pruned]] = torch.zeros_like(data[indices[:num_pruned]])
+            locked_masks[name] = indices[:num_pruned]
+            total_pruned += num_pruned * data.shape[1]
         # Return number of parameters remaining
-        return total_params - pruned_params, locked_masks
+        return total_params - total_pruned, locked_masks
