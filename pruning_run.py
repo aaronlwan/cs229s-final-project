@@ -294,11 +294,11 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         if grad_clip != 0.0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        
+
         # Make sure we do not train the pruned weights
         if locked_masks is not None:
             for n, w in model.named_parameters():                                                                                                                                                                           
-                if w.grad is not None and n in locked_masks:                                                                                                                                                                                   
+                if w.grad is not None and n in locked_masks:    
                     w.grad.view(-1)[locked_masks[n]] = 0
 
         # step the optimizer and scaler if training in fp16
@@ -319,7 +319,7 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
             if local_iter_num >= 5: # let the training loop settle a bit
                 mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
                 running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-            # print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
         iter_num += 1
         local_iter_num += 1
 

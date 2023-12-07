@@ -495,19 +495,22 @@ class GPT(nn.Module):
             paramName, _, index = l2_norms.pop()
             for name, param in self.named_parameters():
                 if name == paramName:
-                    # Prune the row
-                    param.data[index] = torch.zeros(param.data[index].shape)
-                    if name not in locked_masks:
-                        locked_masks[name] = []
                     if len(param.data.shape) == 1:
                         # Reshape to 1 row and n columns
                         reshaped_param_data = param.data.view(1, -1)
                     else:
                         reshaped_param_data = param.data
+
+                    # Prune the row
+                    reshaped_param_data[index] = torch.zeros_like(reshaped_param_data[index])
+
+                    if name not in locked_masks:
+                        locked_masks[name] = []
+                    
                     for i in range(reshaped_param_data.shape[1]):
                         locked_masks[name].append(index * reshaped_param_data.shape[1] + i) 
                     
-                    pruned_params += param.data[index].numel()
+                    pruned_params += reshaped_param_data[index].numel()
                     break
 
         # Return number of parameters remaining
