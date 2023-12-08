@@ -479,7 +479,7 @@ class GPT(nn.Module):
         locked_masks = {}
 
         for name, param in self.named_parameters():
-            if name == 'transformer.wte.weight' or name == 'transformer.wpe.weight': continue
+            # if name == 'transformer.wte.weight' or name == 'transformer.wpe.weight': continue
  
             if len(param.data.shape) == 1:
                 # Reshape to 1 x n
