@@ -1,5 +1,5 @@
 import torch
-def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40, inputModel=None, locked_masks=None):
+def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40, inputModel=None, pruning_rate=0.1):
     import os
     import time
     import math
@@ -294,12 +294,15 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         if grad_clip != 0.0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        
+        if iter_num % 10 == 0:
+            params = model.l2_norm_pruning(0.01 * pruning_rate * iter_num)
 
         # Make sure we do not train the pruned weights
-        if locked_masks is not None:
+        if model.locked_masks is not None:
             for n, w in model.named_parameters():                                                                                                                                                                           
-                if w.grad is not None and n in locked_masks:
-                    for row in locked_masks[n]:
+                if w.grad is not None and n in model.locked_masks:
+                    for row in model.locked_masks[n]:
                         if len(w.grad.shape) == 1:
                             w.grad = torch.zeros_like(w.grad)
                         else:
@@ -346,7 +349,7 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         return (end - start)/(eval_iters*batch_size), total_loss/eval_iters
     val_time, val_loss = eval_execution(model, batch_size, 1)
     print(f"Validation time: {val_time}, Validation loss: {val_loss}")
-    return model, val_time, val_loss
+    return model, val_time, val_loss, params
 
 
 def load_model(model_path, device='cuda'):
@@ -412,8 +415,7 @@ def get_batch(split, block_size=1024, batch_size=12, device_type='cuda', device=
 # del model
 
 # L2 Norm Pruning
-model, val_time, val_loss = train(max_iters=100)
-params, _ = model.l2_norm_pruning(0)
+model, val_time, val_loss, params = train(max_iters=1)
 # Write the results to a file
 with open('l2_pruning_results.txt', 'a') as f:
     f.write(f"{params}, {val_time}, {val_loss}")
@@ -421,9 +423,9 @@ with open('l2_pruning_results.txt', 'a') as f:
 
 # Decrease model size by 10% each iteration until 10% of original model size
 for i in range(1, 10):
-    params, locked_masks = model.l2_norm_pruning(0.1 * i)
+    # params, locked_masks = model.l2_norm_pruning(0.1 * i)
+    model, val_time,  val_loss, params = train(max_iters=100, inputModel=model, pruning_rate=0.1 * i)
     print(f"Pruned model to {params} parameters")
-    model, val_time,  val_loss = train(max_iters=100, inputModel=model, locked_masks=locked_masks)
     # Write the results to a file
     with open('l2_pruning_results.txt', 'a') as f:
         f.write(f"{params}, {val_time}, {val_loss}")

@@ -132,6 +132,7 @@ class GPT(nn.Module):
         assert config.block_size is not None
         self.config = config
         self.quantize = quantize
+        self.locked_masks = None
         if quantize:
             print("Model in quantized mode")
 
@@ -490,5 +491,6 @@ class GPT(nn.Module):
             data[indices[:num_pruned]] = torch.zeros_like(data[indices[:num_pruned]])
             locked_masks[name] = indices[:num_pruned]
             total_pruned += num_pruned * data.shape[1]
+        self.locked_masks = locked_masks
         # Return number of parameters remaining
-        return total_params - total_pruned, locked_masks
+        return total_params - total_pruned
