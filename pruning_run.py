@@ -349,7 +349,7 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         end = time.time()
         return (end - start)/(eval_iters*batch_size), total_loss/eval_iters
 
-    val_time, val_loss = eval_execution(model, batch_size, eval_iters)
+    val_time, val_loss = eval_execution(model, batch_size, 1)
     print(f"Validation time: {val_time}, Validation loss: {val_loss}")
     return model, val_time, val_loss, params
 
