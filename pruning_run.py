@@ -358,7 +358,7 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
 # L2 Norm Pruning
 model = None
 for i in range(10):
-    model, val_time, val_loss, params = train(max_iters=1 if i == 0 else 100, inputModel=model, pruning_rate=0.1 * i)
+    model, val_time, val_loss, params = train(max_iters=100, inputModel=model, pruning_rate=0.1 * i)
     print(f"Model has {params} parameters")
     with open('l2_pruning_results.txt', 'a') as f:
         f.write(f"{params}, {val_time}, {val_loss}")
