@@ -295,8 +295,8 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         
-        if iter_num % 10 == 0 and pruning_rate > 0:
-            params = model.l2_norm_pruning(pruning_rate * 0.01 * iter_num)
+        if pruning_rate > 0:
+            params = model.l2_norm_pruning(pruning_rate * iter_num * 0.01 + pruning_rate - 0.1)
 
         # Make sure we do not train the pruned weights
         if model.locked_masks is not None:
@@ -349,7 +349,7 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         end = time.time()
         return (end - start)/(eval_iters*batch_size), total_loss/eval_iters
 
-    val_time, val_loss = eval_execution(model, batch_size, 1)
+    val_time, val_loss = eval_execution(model, batch_size, eval_iters)
     print(f"Validation time: {val_time}, Validation loss: {val_loss}")
     return model, val_time, val_loss, params
 
