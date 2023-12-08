@@ -461,13 +461,15 @@ class GPT(nn.Module):
             magnitude = magnitude.view(-1)
             # get indicies (row and column) of the smallest weights
             indices = torch.argsort(magnitude, descending=False)
+            # Create a mask where nonzero elems are 1 and zero elems are 0
+            locked_masks[name] = torch.ones_like(param.data)
+            locked_masks[name].view(-1)[indices[:num_pruned]] = 0
             # prune the smallest weights
-            param.data.view(-1)[indices[:num_pruned]] = 0
-            locked_masks[name] = indices[:num_pruned]
+            param.data = param.data * locked_masks[name]
             total_pruned += num_pruned
-
+        self.locked_masks = locked_masks
         # Return number of parameters remaining
-        return self.get_num_params() - total_pruned, locked_masks
+        return self.get_num_params() - total_pruned
 
     def l2_norm_pruning(self, pruning_rate):
         # Prune the rows w/ the smallest L2 norm in the model based on the pruning rate
@@ -475,22 +477,40 @@ class GPT(nn.Module):
         total_pruned = 0
         total_params = self.get_num_params()
         locked_masks = {}
+
         for name, param in self.named_parameters():
+            if name == 'transformer.wte.weight' or name == 'transformer.wpe.weight': continue
+ 
+            num_names += 1
             if len(param.data.shape) == 1:
                 # Reshape to 1 x n
                 data = param.data.view(1, -1)
             else:
                 data = param.data
+
             # calculate the number of rows to prune
             num_pruned = int(data.shape[0] * pruning_rate)
+
             # get the L2 norm of the rows
             l2_norm = torch.linalg.norm(data, dim=1)
+
             # get indicies (row) of the smallest L2 norm
             indices = torch.argsort(l2_norm, descending=False)
+
+            # Create a mask where nonzero elems are 1 and zero elems are 0
+            if name not in locked_masks: 
+                locked_masks[name] = torch.ones_like(data)
+                unique_names += 1
+            locked_masks[name][indices[:num_pruned]] = 0
+
             # prune the smallest rows
-            data[indices[:num_pruned]] = torch.zeros_like(data[indices[:num_pruned]])
-            locked_masks[name] = indices[:num_pruned]
+            if len(param.data.shape) == 1:
+                param.data = param.data * locked_masks[name].view(-1)
+            else:
+                param.data = param.data * locked_masks[name]
+
             total_pruned += num_pruned * data.shape[1]
+
         self.locked_masks = locked_masks
         # Return number of parameters remaining
         return total_params - total_pruned
