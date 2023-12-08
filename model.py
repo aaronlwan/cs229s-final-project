@@ -481,7 +481,6 @@ class GPT(nn.Module):
         for name, param in self.named_parameters():
             if name == 'transformer.wte.weight' or name == 'transformer.wpe.weight': continue
  
-            num_names += 1
             if len(param.data.shape) == 1:
                 # Reshape to 1 x n
                 data = param.data.view(1, -1)
@@ -500,7 +499,7 @@ class GPT(nn.Module):
             # Create a mask where nonzero elems are 1 and zero elems are 0
             if name not in locked_masks: 
                 locked_masks[name] = torch.ones_like(data)
-                unique_names += 1
+
             locked_masks[name][indices[:num_pruned]] = 0
 
             # prune the smallest rows
