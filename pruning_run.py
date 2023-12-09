@@ -297,7 +297,7 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         
         if pruning_rate > 0:
             # params = model.l2_norm_pruning(pruning_rate * iter_num * 0.01 + pruning_rate - 0.1)
-            params = model.magnitude_pruning(pruning_rate * iter_num * 0.01 + pruning_rate - 0.1)
+            params = model.magnitude_pruning(0.1 * iter_num * 0.01 + pruning_rate - 0.1)
 
         # Make sure we do not train the pruned weights
         if model.locked_masks is not None:
