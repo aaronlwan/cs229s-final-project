@@ -296,7 +296,8 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         
         if pruning_rate > 0:
-            params = model.l2_norm_pruning(pruning_rate * iter_num * 0.01 + pruning_rate - 0.1)
+            # params = model.l2_norm_pruning(pruning_rate * iter_num * 0.01 + pruning_rate - 0.1)
+            params = model.magnitude_pruning(pruning_rate * iter_num * 0.01 + pruning_rate - 0.1)
 
         # Make sure we do not train the pruned weights
         if model.locked_masks is not None:
@@ -355,11 +356,23 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
 
 # -----------------------------------------------------------------------------
 
-# L2 Norm Pruning
+# # L2 Norm Pruning
+# model = None
+# for i in range(10):
+#     model, val_time, val_loss, params = train(max_iters=100, inputModel=model, pruning_rate=0.1 * i)
+#     print(f"Model has {params} parameters")
+#     with open('l2_pruning_results.txt', 'a') as f:
+#         f.write(f"{params}, {val_time}, {val_loss}")
+#         f.write("\n")
+
+# -----------------------------------------------------------------------------
+
+# Absolute Value Pruning
 model = None
 for i in range(10):
     model, val_time, val_loss, params = train(max_iters=100, inputModel=model, pruning_rate=0.1 * i)
     print(f"Model has {params} parameters")
-    with open('l2_pruning_results.txt', 'a') as f:
+    with open('pruning_results.txt', 'a') as f:
         f.write(f"{params}, {val_time}, {val_loss}")
         f.write("\n")
+
