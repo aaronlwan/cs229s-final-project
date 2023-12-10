@@ -297,7 +297,8 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         
         if pruning_rate > 0:
             # params = model.l2_norm_pruning(pruning_rate * iter_num * 0.01 + pruning_rate - 0.1)
-            params = model.magnitude_pruning(0.1 * iter_num * 0.01 + pruning_rate - 0.1)
+            # params = model.magnitude_pruning(0.1 * iter_num * 0.01 + pruning_rate - 0.1)
+            params = model.magnitude_pruning(0.0005 * iter_num)
 
         # Make sure we do not train the pruned weights
         if model.locked_masks is not None:
@@ -350,7 +351,11 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         end = time.time()
         return (end - start)/(eval_iters*batch_size), total_loss/eval_iters
 
-    val_time, val_loss = eval_execution(model, batch_size, 1)
+    torch.save(model, 'pruned.pt')
+    # val_time, val_loss = eval_execution(model, batch_size, 1)
+    val_time = None
+    losses = estimate_loss()
+    val_loss = losses['val']
     print(f"Validation time: {val_time}, Validation loss: {val_loss}")
     return model, val_time, val_loss, params
 
@@ -368,11 +373,19 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
 # -----------------------------------------------------------------------------
 
 # Absolute Value Pruning
-model = None
-for i in range(10):
-    model, val_time, val_loss, params = train(max_iters=100, inputModel=model, pruning_rate=0.1 * i)
-    print(f"Model has {params} parameters")
-    with open('pruning_results.txt', 'a') as f:
-        f.write(f"{params}, {val_time}, {val_loss}")
-        f.write("\n")
+# model = None
+# for i in range(10):
+#     model, val_time, val_loss, params = train(max_iters=100, inputModel=model, pruning_rate=0.1 * i)
+#     print(f"Model has {params} parameters")
+#     with open('pruning_results.txt', 'a') as f:
+#         f.write(f"{params}, {val_time}, {val_loss}")
+#         f.write("\n")
 
+# -----------------------------------------------------------------------------
+
+# Prune 25% of the model over 500 iterations so 75% of the model remains
+model, val_time, val_loss, params = train(max_iters=500, inputModel=None, pruning_rate=0.25)
+# Save the model
+torch.save(model, 'pruned-25.pt')
+print(f"Model has {params} parameters")
+print(f"Validation loss: {val_loss}")
