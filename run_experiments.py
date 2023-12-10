@@ -395,32 +395,77 @@ def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, dev
     print('Tokens per second: ', tokens_per_sec)
     return tokens_per_sec
 
+@torch.no_grad()
+def estimate_val_loss(model, eval_iters=200):
+    model.eval()
+    losses = torch.zeros(eval_iters)
+    for k in range(eval_iters):
+        X, Y = get_batch('val')
+        logits, loss = model(X, Y)
+        losses[k] = loss.item()
+    out = losses.mean()
+    return out
 
-# Train
-_, loss = train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
+def estimate_memory_usage(model, eval_iters=200):
+    model.eval()
+    for k in range(eval_iters):
+        X, Y = get_batch('val', batch_size=1)
+        logits, loss = model(X, Y)
+    return torch.cuda.max_memory_allocated()
 
-training_throughput_4, _ = train(dataset='wikitext', batch_size=4, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
+# ----------------------------------------------------------------------------------------------------------------------
 
-training_throughput_12, _ = train(dataset='wikitext', batch_size=12, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
+# Flag
+experiment = 'memory_usage'
+# Checkpoint path
+model_path = 'ckpt.pt'
 
-model = load_model('ckpt.pt')
+# Training Metrics
 
-# Batch size 1
-inference_throughput_1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
+# This trains the model for 500 iterations and returns the training throughput and validation loss 
+if experiment == 'val_loss_from_scratch':
+    _, val_loss = train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
 
-# Batch size 12
-inference_throughput_12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
+if experiment == 'training_throughput':
+    training_throughput_4, _ = train(dataset='wikitext', batch_size=4, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
+    training_throughput_12, _ = train(dataset='wikitext', batch_size=12, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
+
+if experiment == 'val_loss_from_checkpoint':
+    model = load_model(model_path)
+    # Get the model loss on validation set for the leaderboard
+    val_loss = estimate_val_loss(model)
+
+
+if experiment == 'memory_usage':
+    model = load_model(model_path)
+    # Get the memory usage of the model
+    memory_usage_1 = estimate_memory_usage(model)
+
+if experiment == 'inference_throughput':
+    # Batch size 1
+    inference_throughput_1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
+
+    # Batch size 12
+    inference_throughput_12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
 
 
 # Write results to results.json
 import json
-results = {}
 
-results['loss'] = loss
-results['training_throughput_4'] = training_throughput_4
-results['training_throughput_12'] = training_throughput_12
-results['inference_throughput_1'] = inference_throughput_1
-results['inference_throughput_12'] = inference_throughput_12
+# Load the existing results
+with open('results.json') as f:
+    results = json.load(f)
 
-with open('results.json', 'w') as f:
-    json.dump(results, f)
+# Add the new results
+if experiment == 'val_loss_from_scratch':
+    results['loss'] = val_loss
+if experiment == 'training_throughput':
+    results['training_throughput_4'] = training_throughput_4
+    results['training_throughput_12'] = training_throughput_12
+if experiment == 'val_loss_from_checkpoint':
+    results['loss'] = val_loss
+if experiment == 'memory_usage':
+    results['memory_usage_1'] = memory_usage_1
+if experiment == 'inference_throughput':
+    results['inference_throughput_1'] = inference_throughput_1
+    results['inference_throughput_12'] = inference_throughput_12
