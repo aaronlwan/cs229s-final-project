@@ -321,8 +321,10 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
     total_iters = iter_num + 1
     total_tokens = tokens_per_iter * total_iters
     training_throughput = total_tokens / (end_time - start_time)
-    last_loss = lossf
-    return training_throughput, last_loss
+    losses = estimate_loss()
+    val_loss = losses['val']
+    print(f"Training Throughput: {training_throughput:.2f}")
+    return training_throughput, val_loss
 
 
 def load_model(model_path, device='cuda'):
