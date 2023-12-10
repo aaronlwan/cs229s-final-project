@@ -351,7 +351,15 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
         end = time.time()
         return (end - start)/(eval_iters*batch_size), total_loss/eval_iters
 
-    torch.save(model, 'pruned.pt')
+    checkpoint = {
+        'model': raw_model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'model_args': model_args,
+        'iter_num': iter_num,
+        'best_val_loss': best_val_loss,
+        'config': config,
+    }
+    torch.save(checkpoint, 'pruned-25.pt')
     # val_time, val_loss = eval_execution(model, batch_size, 1)
     val_time = None
     losses = estimate_loss()
@@ -385,7 +393,5 @@ def train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, grad
 
 # Prune 25% of the model over 500 iterations so 75% of the model remains
 model, val_time, val_loss, params = train(max_iters=500, inputModel=None, pruning_rate=0.25)
-# Save the model
-torch.save(model, 'pruned-25.pt')
 print(f"Model has {params} parameters")
 print(f"Validation loss: {val_loss}")
