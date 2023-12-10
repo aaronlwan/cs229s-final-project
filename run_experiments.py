@@ -407,9 +407,10 @@ def estimate_val_loss(model, eval_iters=200):
     return out
 
 def estimate_memory_usage(model, eval_iters=200):
+    train_data, val_data = load_data()
     model.eval()
     for k in range(eval_iters):
-        X, Y = get_batch('val', batch_size=1)
+        X, Y = get_batch('val', batch_size=1, train_data=train_data, val_data=val_data)
         logits, loss = model(X, Y)
     return torch.cuda.max_memory_allocated()
 
