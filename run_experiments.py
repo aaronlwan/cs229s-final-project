@@ -330,20 +330,21 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
 def load_model(model_path, device='cuda'):
     # Load GPT model from checkpoint
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load(model_path, map_location=device)
-    # model_args = checkpoint['model_args']
+    if model_path != 'pruned-25.pt':
+        checkpoint = torch.load(model_path, map_location=device)
+        model_args = checkpoint['model_args']
 
-    # Create the model
-    # gptconf = GPTConfig(**model_args)
-    # model = GPT(gptconf)
-    # state_dict = checkpoint['model']
+        # Create the model
+        gptconf = GPTConfig(**model_args)
+        model = GPT(gptconf)
+        state_dict = checkpoint['model']
 
-    # Fix the keys of the state dictionary :(
-    # unwanted_prefix = '_orig_mod.'
-    # for k,v in list(state_dict.items()):
-    #     if k.startswith(unwanted_prefix):
-    #         state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
-    # model.load_state_dict(state_dict)
+        # Fix the keys of the state dictionary :(
+        unwanted_prefix = '_orig_mod.'
+        for k,v in list(state_dict.items()):
+            if k.startswith(unwanted_prefix):
+                state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
+        model.load_state_dict(state_dict)
     model.to(device)
     return model
 
@@ -398,9 +399,10 @@ def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, dev
 @torch.no_grad()
 def estimate_val_loss(model, eval_iters=200):
     model.eval()
+    train_data, val_data = load_data()
     losses = torch.zeros(eval_iters)
     for k in range(eval_iters):
-        X, Y = get_batch('val')
+        X, Y = get_batch('val', train_data=train_data, val_data=val_data)
         logits, loss = model(X, Y)
         losses[k] = loss.item()
     out = losses.mean()
@@ -419,7 +421,7 @@ def estimate_memory_usage(model, eval_iters=200):
 # Flag
 experiment = 'memory_usage'
 # Checkpoint path
-model_path = 'pruned-25.pt'
+model_path = 'ckpt.pt'
 
 # Training Metrics
 
