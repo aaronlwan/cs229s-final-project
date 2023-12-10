@@ -469,3 +469,7 @@ if experiment == 'memory_usage':
 if experiment == 'inference_throughput':
     results['inference_throughput_1'] = inference_throughput_1
     results['inference_throughput_12'] = inference_throughput_12
+
+# Write the results back to the file
+with open('results.json', 'w') as f:
+    json.dump(results, f)
