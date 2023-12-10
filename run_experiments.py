@@ -330,23 +330,20 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
 def load_model(model_path, device='cuda'):
     # Load GPT model from checkpoint
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if model_path != 'pruned-25.pt':
-        checkpoint = torch.load(model_path, map_location=device)
-        model_args = checkpoint['model_args']
+    checkpoint = torch.load(model_path, map_location=device)
+    model_args = checkpoint['model_args']
 
-        # Create the model
-        gptconf = GPTConfig(**model_args)
-        model = GPT(gptconf)
-        state_dict = checkpoint['model']
+    # Create the model
+    gptconf = GPTConfig(**model_args)
+    model = GPT(gptconf)
+    state_dict = checkpoint['model']
 
-        # Fix the keys of the state dictionary :(
-        unwanted_prefix = '_orig_mod.'
-        for k,v in list(state_dict.items()):
-            if k.startswith(unwanted_prefix):
-                state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
-        model.load_state_dict(state_dict)
-    else:
-        model = torch.load(model_path, map_location=device)
+    # Fix the keys of the state dictionary :(
+    unwanted_prefix = '_orig_mod.'
+    for k,v in list(state_dict.items()):
+        if k.startswith(unwanted_prefix):
+            state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
+    model.load_state_dict(state_dict)
     model.to(device)
     return model
 
