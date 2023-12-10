@@ -234,7 +234,7 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
 
     # training loop
     X, Y = get_batch('train') # fetch the very first batch
-    t0 = time.time()
+    start_time = time.time()
     local_iter_num = 0 # number of iterations in the lifetime of this process
     raw_model = model.module if ddp else model # unwrap DDP container if needed
     running_mfu = -1.0
@@ -316,11 +316,13 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
 
         # termination conditions
         if iter_num > max_iters:
+            end_time = time.time()
             break
-    total_samples = iter_num * len(Y)
-    samples_per_sec = total_samples / (time.time() - t0)
+    total_iters = iter_num + 1
+    total_tokens = tokens_per_iter * total_iters
+    training_throughput = total_tokens / (end_time - start_time)
     last_loss = lossf
-    return samples_per_sec, last_loss
+    return training_throughput, last_loss
 
 
 def load_model(model_path, device='cuda'):
@@ -377,7 +379,6 @@ def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, dev
     start_time = time.time()
     with torch.no_grad():
         # with ctx:
-        model.quantize_weights(model.absmax_quantize)
         for _ in range(num_samples):
             X, Y = get_batch('val', batch_size=batch_size, device_type=device, device=device, train_data=train_data, val_data=val_data)
             y = model.generate(X, max_new_tokens, temperature=temperature, top_k=top_k)
@@ -396,17 +397,17 @@ def perform_inference(model, batch_size, max_new_tokens, temperature, top_k, dev
 # Train
 _, loss = train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
 
-samples_per_sec_4, _ = train(dataset='wikitext', batch_size=4, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
+training_throughput_4, _ = train(dataset='wikitext', batch_size=4, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
 
-samples_per_sec_12, _ = train(dataset='wikitext', batch_size=12, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
+training_throughput_12, _ = train(dataset='wikitext', batch_size=12, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
 
 model = load_model('ckpt.pt')
 
 # Batch size 1
-tps1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
+inference_throughput_1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
 
 # Batch size 12
-tps12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
+inference_throughput_12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
 
 
 # Write results to results.json
@@ -414,10 +415,10 @@ import json
 results = {}
 
 results['loss'] = loss
-results['training_throughput_4'] = samples_per_sec_4
-results['training_throughput_12'] = samples_per_sec_12
-results['inference_throughput_1'] = tps1
-results['inference_throughput_12'] = tps12
+results['training_throughput_4'] = training_throughput_4
+results['training_throughput_12'] = training_throughput_12
+results['inference_throughput_1'] = inference_throughput_1
+results['inference_throughput_12'] = inference_throughput_12
 
 with open('results.json', 'w') as f:
     json.dump(results, f)
