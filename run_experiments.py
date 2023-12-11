@@ -347,7 +347,7 @@ def load_model(model_path, device='cuda'):
 
     if model_path == 'pruned-25.pt':
         for name, param in model.named_parameters():
-            param.data = param.data.to_sparse()
+            param = param.to_sparse()
 
     model.to(device)
     return model
