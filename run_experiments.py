@@ -449,31 +449,31 @@ def estimate_memory_usage(model, eval_iters=200):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Flag
-experiment = 'memory_usage'
+experiments = ['memory_usage', 'val_loss_from_checkpoint']
 # Checkpoint path
 model_path = 'zeropoint_quantized_ckpt.pt'
 
 # Training Metrics
 
 # This trains the model for 500 iterations and returns the training throughput and validation loss 
-if experiment == 'val_loss_from_scratch':
+if 'val_loss_from_scratch' in experiments:
     _, val_loss = train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
 
-if experiment == 'training_throughput':
+if 'training_throughput' in experiments:
     training_throughput_4, _ = train(dataset='wikitext', batch_size=4, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
     training_throughput_12, _ = train(dataset='wikitext', batch_size=12, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
 
-if experiment == 'val_loss_from_checkpoint':
+if 'val_loss_from_checkpoint' in experiments:
     model = load_model(model_path)
     # Get the model loss on validation set for the leaderboard
     val_loss = estimate_val_loss(model)
 
-if experiment == 'memory_usage':
+if 'memory_usage' in experiments:
     model = load_model(model_path)
     # Get the memory usage of the model
     memory_usage_1 = estimate_memory_usage(model)
 
-if experiment == 'inference_throughput':
+if 'inference_throughput' in experiments:
     # Batch size 1
     inference_throughput_1 = perform_inference(model, 1, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
 
@@ -488,16 +488,16 @@ with open('results.json') as f:
     results = json.load(f)
 
 # Add the new results
-if experiment == 'val_loss_from_scratch':
+if 'val_loss_from_scratch' in experiments:
     results['loss'] = val_loss
-if experiment == 'training_throughput':
+if 'training_throughput' in experiments:
     results['training_throughput_4'] = training_throughput_4
     results['training_throughput_12'] = training_throughput_12
-if experiment == 'val_loss_from_checkpoint':
+if 'val_loss_from_checkpoint' in experiments:
     results['loss'] = val_loss
-if experiment == 'memory_usage':
+if 'memory_usage' in experiments:
     results['memory_usage_1'] = memory_usage_1
-if experiment == 'inference_throughput':
+if 'inference_throughput' in experiments:
     results['inference_throughput_1'] = inference_throughput_1
     results['inference_throughput_12'] = inference_throughput_12
 
