@@ -344,6 +344,11 @@ def load_model(model_path, device='cuda'):
         if k.startswith(unwanted_prefix):
             state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
     model.load_state_dict(state_dict)
+
+    if model_path == 'pruned-25.pt':
+        for name, param in model.named_parameters():
+            param.data = param.data.to_sparse()
+
     model.to(device)
     return model
 
@@ -421,7 +426,7 @@ def estimate_memory_usage(model, eval_iters=200):
 # Flag
 experiment = 'memory_usage'
 # Checkpoint path
-model_path = 'pruned-25.pt'
+model_path = 'ckpt.pt'
 
 # Training Metrics
 
