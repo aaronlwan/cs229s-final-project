@@ -451,7 +451,7 @@ def estimate_memory_usage(model, eval_iters=200):
 # Flag
 experiment = 'memory_usage'
 # Checkpoint path
-model_path = 'quantized_ckpt.pt'
+model_path = 'zeropoint_quantized_ckpt.pt'
 
 # Training Metrics
 
@@ -468,7 +468,6 @@ if experiment == 'val_loss_from_checkpoint':
     # Get the model loss on validation set for the leaderboard
     val_loss = estimate_val_loss(model)
 
-
 if experiment == 'memory_usage':
     model = load_model(model_path)
     # Get the memory usage of the model
@@ -480,7 +479,6 @@ if experiment == 'inference_throughput':
 
     # Batch size 12
     inference_throughput_12 = perform_inference(model, 12, 500, 0.8, 200, torch.device("cuda"), 'bfloat16', 5)
-
 
 # Write results to results.json
 import json
