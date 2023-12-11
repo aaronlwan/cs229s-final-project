@@ -328,6 +328,7 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
 
 
 def load_model(model_path, device='cuda'):
+    print(f"Loading model from {model_path}")
     # Load GPT model from checkpoint
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     checkpoint = torch.load(model_path, map_location=device)
@@ -335,7 +336,10 @@ def load_model(model_path, device='cuda'):
 
     # Create the model
     gptconf = GPTConfig(**model_args)
-    model = GPT(gptconf)
+    if 'quantize' not in model_path:
+        model = GPT(gptconf, quantize=False)
+    else:
+        model = GPT(gptconf, quantize=True)
     state_dict = checkpoint['model']
 
     # Fix the keys of the state dictionary :(
@@ -343,9 +347,30 @@ def load_model(model_path, device='cuda'):
     for k,v in list(state_dict.items()):
         if k.startswith(unwanted_prefix):
             state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
+    
+    if 'quantize' in model_path:
+            # add params
+        for name, param in model.named_parameters():
+            if 'transformer.h' in name:
+                param.requires_grad = False
+                param.data = param.data.to(torch.int8)
     model.load_state_dict(state_dict)
-
+    if 'quantize' in model_path:
+        model.quantization_scales = checkpoint['quantization_scales']
     model.to(device)
+
+    total_bytes = 0
+
+    for param in model.parameters():
+        total_bytes += param.numel() * param.element_size()
+
+    print(f"Total memory usage in bytes: {total_bytes}")
+    print(f"Total memory usage in megabytes: {total_bytes / (1024 ** 2)}")
+    print(param.element_size())
+
+    for name, param in model.named_parameters():
+        print(f"Layer: {name}, Type: {param.dtype}, Size: {param.data.shape}")
+
     return model
 
 # Load Data
@@ -415,14 +440,16 @@ def estimate_memory_usage(model, eval_iters=200):
     for k in range(eval_iters):
         X, Y = get_batch('val', batch_size=1, train_data=train_data, val_data=val_data)
         logits, loss = model(X, Y)
-    return torch.cuda.max_memory_allocated()
+    mem = torch.cuda.max_memory_allocated()
+    print('Memory usage: ', mem)
+    return mem
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Flag
 experiment = 'memory_usage'
 # Checkpoint path
-model_path = 'ckpt.pt'
+model_path = 'quantized_ckpt.pt'
 
 # Training Metrics
 

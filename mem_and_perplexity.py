@@ -105,7 +105,7 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 # model
 # init from a model saved in a specific directory
 if quantize:
-    ckpt_path = os.path.join(out_dir, 'quantized_ckpt.pt')
+    ckpt_path = 'quantized_ckpt.pt'
     checkpoint = torch.load(ckpt_path, map_location=device)
     gptconf = GPTConfig(**checkpoint['model_args'])
     model = GPT(gptconf)
@@ -185,18 +185,23 @@ def get_batch(split):
 
 
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
-iter_num = 0
-best_val_loss = 1e9
+@torch.no_grad()
+def run():
+    iter_num = 0
+    best_val_loss = 1e9
 
-losses = torch.zeros(eval_iters)
-probs = []
-for k in range(eval_iters):
-    X, Y = get_batch('val')
-    with ctx:
-        logits, loss = model(X, Y)
-    losses[k] = loss.item()
-    probs.append(torch.softmax(logits, dim=-1))
+    losses = torch.zeros(eval_iters)
+    probs = []
+    for k in range(eval_iters):
+        X, Y = get_batch('val')
+        with ctx:
+            logits, loss = model(X, Y)
+        losses[k] = loss.item()
+        probs.append(torch.softmax(logits, dim=-1))
+    
+    return losses, probs
 
+losses, probs = run()
 
 def perplexity_score(probs):
     return torch.exp(-torch.mean(torch.log(probs)))
