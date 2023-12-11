@@ -433,13 +433,15 @@ def estimate_val_loss(model, eval_iters=200):
     out = losses.mean()
     return out
 
+@torch.no_grad()
 def estimate_memory_usage(model, eval_iters=200):
     train_data, val_data = load_data()
     model.eval()
     torch.cuda.reset_peak_memory_stats()
-    for k in range(eval_iters):
-        X, Y = get_batch('val', batch_size=1, train_data=train_data, val_data=val_data)
-        logits, loss = model(X, Y)
+    with torch.no_grad():
+        for k in range(eval_iters):
+            X, Y = get_batch('val', batch_size=1, train_data=train_data, val_data=val_data)
+            logits, loss = model(X, Y)
     mem = torch.cuda.max_memory_allocated()
     print('Memory usage: ', mem)
     return mem
