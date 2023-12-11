@@ -1,7 +1,7 @@
 import numpy as np, torch, os, tiktoken, time
 from model import GPT, GPTConfig
 from contextlib import nullcontext
-
+from tqdm import tqdm
 
 def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, gradient_accumulation_steps=40):
     import os
@@ -416,8 +416,8 @@ def estimate_memory_usage(model, eval_iters=200):
     train_data, val_data = load_data()
     model.eval()
     torch.cuda.reset_peak_memory_stats()
-    for k in range(eval_iters):
-        X, Y = get_batch('val', batch_size=1, train_data=train_data, val_data=val_data)
+    for k in tqdm(range(eval_iters)):
+        X, Y = get_batch('val', batch_size=1, train_data=train_data, val_data=val_data, device_type='cpu', device=torch.device("cpu"))
         logits, loss = model(X, Y)
     return torch.cuda.max_memory_allocated()
 
@@ -445,7 +445,7 @@ if experiment == 'val_loss_from_checkpoint':
 
 
 if experiment == 'memory_usage':
-    model = load_model(model_path)
+    model = load_model(model_path, device='cpu')
     # Get the memory usage of the model
     memory_usage_1 = estimate_memory_usage(model)
 
