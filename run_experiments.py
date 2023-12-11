@@ -426,7 +426,7 @@ def estimate_memory_usage(model, eval_iters=200):
 # Flag
 experiment = 'memory_usage'
 # Checkpoint path
-model_path = 'ckpt.pt'
+model_path = 'pruned-25.pt'
 
 # Training Metrics
 
