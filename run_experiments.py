@@ -496,7 +496,7 @@ if 'training_throughput' in experiments:
 if 'val_loss_from_checkpoint' in experiments:
     results['loss'] = val_loss
 if 'memory_usage' in experiments:
-    results['memory_usage_1'] = memory_usage_1
+    results['memory_usage'] = memory_usage_1
 if 'inference_throughput' in experiments:
     results['inference_throughput_1'] = inference_throughput_1
     results['inference_throughput_12'] = inference_throughput_12
