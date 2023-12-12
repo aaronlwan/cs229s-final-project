@@ -126,12 +126,13 @@ class GPTConfig:
 
 class GPT(nn.Module):
 
-    def __init__(self, config, quantize=True):
+    def __init__(self, config, quantize=True, absmax_quantize=True):
         super().__init__()
         assert config.vocab_size is not None
         assert config.block_size is not None
         self.config = config
         self.quantize = quantize
+        self.quantize_method = 'absmax' if absmax_quantize else 'zeropoint'
         self.locked_masks = None
         if quantize:
             print("Model in quantized mode")
@@ -210,7 +211,7 @@ class GPT(nn.Module):
 
                 for name in to_dequantize:
                   param = self.get_nested_attr(name)
-                  param.data, _ = self.absmax_quantize(param.data)
+                  param.data, _ = self.quantize_layer(param.data)
             else:
                 x = block(x)
 
@@ -222,7 +223,8 @@ class GPT(nn.Module):
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
-            logits = self.lm_head(x[:, [-1], :])  # note: using list [-1] to preserve the time dim
+            # logits = self.lm_head(x[:, [-1], :])  # note: using list [-1] to preserve the time dim
+            logits = self.lm_head(x)
             loss = None
 
         return logits, loss
@@ -388,10 +390,12 @@ class GPT(nn.Module):
             # Generate speculative tokens from the draft model. Then, run it through the main model.
             # Be sure to set top_k=1, otherwise you'll pollute the RNG! (Which will make your code harder to debug.)
             # use the draft_model to generate speculative tokens
-            idx_speculative = draft_model.generate_kv(idx_cond, num_speculative, temperature, top_k=1)
+            idx_speculative = draft_model.generate(idx_cond, num_speculative, temperature, top_k=1)
 
+            idx_speculative_cond = idx_speculative if idx_speculative.size(1) <= self.config.block_size - num_speculative else idx_speculative[:,
+                                                                                           -self.config.block_size:]
             # obtain the logits from the main model by passing in the idx_speculative
-            all_logits, _ = self(idx_speculative)
+            all_logits, _ = self(idx_speculative_cond)
             # Step through the predictions of the main model, sampling, and check whether they match the next token. Stop upon mismatch.
             # iterate from the end position of idx_cond (prefix sequence) to the end position of idx_speculative (generated sequence)
             for i in range(num_speculative, 0, -1):
@@ -410,7 +414,7 @@ class GPT(nn.Module):
                 # append sampled index to the running sequence and continue
                 idx = torch.cat((idx, idx_next), dim=1)
                 # end the loop if the next token does not match the next token in idx_speculative
-                if idx_next != idx_speculative[0, -i]:
+                if idx_next != idx_speculative_cond[0, -i]:
                     break
 
         print(f"speculative decoding ran for {loop_counter} iterations")
@@ -422,17 +426,36 @@ class GPT(nn.Module):
             obj = getattr(obj, part)
         return obj
 
-    def absmax_quantize(self, X):
-        # Calculate scale for 8 bit absmax quantization
-        scale = 127 / torch.max(torch.abs(X))
-        X_quant = (scale * X).round().to(torch.int8)
-        return X_quant, scale
+    def quantize_layer(self, X):
+        if self.quantize_method == 'absmax':
+            # Calculate scale for 8 bit absmax quantization
+            scale = 127 / torch.max(torch.abs(X))
+            X_quant = (scale * X).round().to(torch.int8)
+            return X_quant, scale
+        else:
+            # use zeropoint quantization
+            x_range = torch.max(X) - torch.min(X)
+            x_range = 1 if x_range == 0 else x_range
+            # Calculate scale
+            scale = 255 / x_range
+            # Shift by zero-point
+            zeropoint = (-scale * torch.min(X) - 128).round()
+            # Scale and round the inputs
+            X_quant = torch.clip((X * scale + zeropoint).round(), -128, 127).to(torch.int8)
+            return X_quant, (scale, zeropoint)
+
 
     def dequantize_layer(self, name):
-        # retrieve scale for dequantization
-        scale = self.quantization_scales[name]
-        quantized = self.get_nested_attr(name).data
-        return quantized.float() / scale
+        if self.quantize_method == 'absmax':
+            # retrieve scale for dequantization
+            scale = self.quantization_scales[name]
+            quantized = self.get_nested_attr(name).data
+            return quantized.float() / scale
+        else:
+            # use zeropoint dequantization
+            scale, zeropoint = self.quantization_scales[name]
+            quantized = self.get_nested_attr(name).data
+            return (quantized - zeropoint) / scale
 
     def quantize_transformers(self):
 
@@ -443,7 +466,7 @@ class GPT(nn.Module):
         for name, param in self.named_parameters():
             # only quantize transformer weights for now
             if 'transformer.h' in name:
-                quantized, scale = self.absmax_quantize(param.data)
+                quantized, scale = self.quantize_layer(param.data)
                 param.data = quantized
                 self.quantization_scales[name] = scale
 

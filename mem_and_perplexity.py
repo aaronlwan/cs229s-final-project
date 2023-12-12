@@ -34,7 +34,7 @@ from model import GPTConfig, GPT
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
-quantize = True if sys.argv[1] == 'quantize' else False
+quantize = True
 out_dir = 'out'
 eval_interval = 2000
 log_interval = 1
@@ -49,7 +49,7 @@ wandb_run_name = 'gpt2'  # 'run' + str(time.time())
 # data
 dataset = 'wikitext'
 gradient_accumulation_steps = 5 * 8  # used to simulate larger batch sizes
-batch_size = 8  # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size = 12  # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
 # model
 n_layer = 12
@@ -190,6 +190,7 @@ def run():
     iter_num = 0
     best_val_loss = 1e9
 
+
     losses = torch.zeros(eval_iters)
     probs = []
     for k in range(eval_iters):
@@ -202,6 +203,7 @@ def run():
     return losses, probs
 
 losses, probs = run()
+
 
 def perplexity_score(probs):
     return torch.exp(-torch.mean(torch.log(probs)))
