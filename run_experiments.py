@@ -324,7 +324,7 @@ def train(dataset='wikitext', batch_size=4, max_iters=500, block_size=1024, grad
     losses = estimate_loss()
     val_loss = losses['val']
     print(f"Training Throughput: {training_throughput:.2f}")
-    return training_throughput, val_loss
+    return training_throughput, val_loss, model
 
 
 def load_model(model_path, device='cuda'):
@@ -449,15 +449,15 @@ def estimate_memory_usage(model, eval_iters=200):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Flag
-experiments = ['memory_usage', 'val_loss_from_checkpoint']
+experiments = ['memory_usage', 'val_loss_from_scratch']
 # Checkpoint path
 model_path = 'zeropoint_quantized_ckpt.pt'
-
+model = None
 # Training Metrics
 
 # This trains the model for 500 iterations and returns the training throughput and validation loss 
 if 'val_loss_from_scratch' in experiments:
-    _, val_loss = train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
+    _, val_loss, model  = train(dataset='wikitext', batch_size=8, max_iters=500, block_size=1024, gradient_accumulation_steps=40)
 
 if 'training_throughput' in experiments:
     training_throughput_4, _ = train(dataset='wikitext', batch_size=4, max_iters=50, block_size=1024, gradient_accumulation_steps=40)
@@ -469,7 +469,7 @@ if 'val_loss_from_checkpoint' in experiments:
     val_loss = estimate_val_loss(model)
 
 if 'memory_usage' in experiments:
-    model = load_model(model_path)
+    if model is None: model = load_model(model_path)
     # Get the memory usage of the model
     memory_usage_1 = estimate_memory_usage(model)
 

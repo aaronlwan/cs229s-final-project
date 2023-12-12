@@ -126,7 +126,7 @@ class GPTConfig:
 
 class GPT(nn.Module):
 
-    def __init__(self, config, quantize=True, absmax_quantize=True):
+    def __init__(self, config, quantize=True, absmax_quantize=False):
         super().__init__()
         assert config.vocab_size is not None
         assert config.block_size is not None
